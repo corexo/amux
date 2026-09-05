@@ -1,0 +1,178 @@
+package center
+
+import (
+	"context"
+	"os"
+	"os/exec"
+	"strings"
+	"time"
+	"unicode"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/andyrewlee/amux/internal/logging"
+	"github.com/andyrewlee/amux/internal/tmux"
+	"github.com/andyrewlee/amux/internal/ui/common"
+)
+
+// AI tab titles: a short (<= aiTitleMaxLen chars) label derived from what the
+// agent in the tab is actually working on, instead of the static "claude" /
+// "codex-2" name.
+//
+// ponytail: amux has no LLM client and gains none here. The summary comes from
+// a helper command that reads the pane transcript on stdin and prints one line;
+// AMUX_TITLE_CMD picks it ("off"/"none" disables), and the default is the
+// claude CLI when it is on PATH, so the feature is silent when it is not.
+const (
+	aiTitleEnv          = "AMUX_TITLE_CMD"
+	aiTitleDefaultCmd   = "claude -p"
+	aiTitleMaxLen       = 10
+	aiTitleDelay        = 20 * time.Second
+	aiTitleMaxAttempts  = 3
+	aiTitleCaptureLines = 60
+	aiTitleTimeout      = 45 * time.Second
+	aiTitlePrompt       = "Below is the terminal transcript of a coding-agent session. " +
+		"Reply with ONLY a tab title for it: at most 10 characters, lowercase, no spaces, " +
+		"no quotes, no punctuation, no explanation. If no task is identifiable yet, reply exactly -.\n\nTranscript:\n"
+)
+
+// aiTitleArm requests that the delayed first attempt be scheduled. Tab
+// creation emits this cheap message instead of the timer itself, so the
+// create-result command never carries a 20s tick a caller might run.
+type aiTitleArm struct {
+	WorkspaceID string
+	TabID       TabID
+}
+
+// aiTitleTick asks for a title attempt for one tab.
+type aiTitleTick struct {
+	WorkspaceID string
+	TabID       TabID
+}
+
+// aiTitleResult carries the helper's answer back to the UI goroutine. An empty
+// Title means "nothing usable yet" and schedules another attempt.
+type aiTitleResult struct {
+	WorkspaceID string
+	TabID       TabID
+	Title       string
+}
+
+// aiTitleCommand returns the configured helper command, or "" when AI titles
+// are disabled or unavailable.
+func aiTitleCommand() string {
+	cmd := strings.TrimSpace(os.Getenv(aiTitleEnv))
+	switch strings.ToLower(cmd) {
+	case "off", "none", "0":
+		return ""
+	case "":
+		if _, err := exec.LookPath("claude"); err != nil {
+			return ""
+		}
+		return aiTitleDefaultCmd
+	}
+	return cmd
+}
+
+// scheduleAITitle arms the next title attempt for a tab. Returns nil when the
+// feature is disabled, so the tick never exists in that case.
+func (m *Model) scheduleAITitle(wsID string, tabID TabID) tea.Cmd {
+	if aiTitleCommand() == "" {
+		return nil
+	}
+	return common.SafeTick(aiTitleDelay, func(time.Time) tea.Msg {
+		return aiTitleTick{WorkspaceID: wsID, TabID: tabID}
+	})
+}
+
+// updateAITitleTick captures the pane transcript and hands it to the helper
+// command off the UI goroutine. Attempts are counted here (not on the result)
+// so a hung or failing helper can never loop forever.
+func (m *Model) updateAITitleTick(msg aiTitleTick) tea.Cmd {
+	cmdStr := aiTitleCommand()
+	if cmdStr == "" {
+		return nil
+	}
+	tab := m.getTabByID(msg.WorkspaceID, msg.TabID)
+	if tab == nil || tab.isClosed() {
+		return nil
+	}
+	tab.mu.Lock()
+	session := tab.SessionName
+	attempt := tab.aiTitleAttempts
+	tab.aiTitleAttempts++
+	tab.mu.Unlock()
+	if session == "" || attempt >= aiTitleMaxAttempts {
+		return nil
+	}
+
+	wsID, tabID, opts := msg.WorkspaceID, msg.TabID, m.tmuxOpts
+	return func() tea.Msg {
+		transcript, ok := tmux.CapturePaneTail(session, aiTitleCaptureLines, opts)
+		if !ok || strings.TrimSpace(transcript) == "" {
+			return aiTitleResult{WorkspaceID: wsID, TabID: tabID}
+		}
+		return aiTitleResult{WorkspaceID: wsID, TabID: tabID, Title: runAITitle(cmdStr, transcript)}
+	}
+}
+
+// runAITitle runs the helper command with the transcript on stdin and returns
+// the sanitized title, or "" on any failure (the tab keeps its current name).
+func runAITitle(cmdStr, transcript string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), aiTitleTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
+	cmd.Stdin = strings.NewReader(aiTitlePrompt + transcript)
+	out, err := cmd.Output()
+	if err != nil {
+		logging.Warn("AI tab title command %q failed: %v", cmdStr, err)
+		return ""
+	}
+	return sanitizeAITitle(string(out))
+}
+
+// sanitizeAITitle reduces a helper's answer to a tab label: first non-empty
+// line, no wrapping quotes, no control characters or whitespace, capped at
+// aiTitleMaxLen runes. "" means unusable ("-" is the helper's "no idea yet").
+func sanitizeAITitle(s string) string {
+	line := ""
+	for _, candidate := range strings.Split(s, "\n") {
+		if line = strings.TrimSpace(candidate); line != "" {
+			break
+		}
+	}
+	line = strings.Trim(line, "\"'`*")
+
+	var title []rune
+	for _, r := range line {
+		if unicode.IsControl(r) || unicode.IsSpace(r) {
+			continue
+		}
+		title = append(title, r)
+		if len(title) == aiTitleMaxLen {
+			break
+		}
+	}
+	if out := string(title); out != "-" {
+		return out
+	}
+	return ""
+}
+
+// updateAITitleResult applies a title, or re-arms the tick when the helper had
+// nothing usable yet.
+func (m *Model) updateAITitleResult(msg aiTitleResult) tea.Cmd {
+	tab := m.getTabByID(msg.WorkspaceID, msg.TabID)
+	if tab == nil || tab.isClosed() {
+		return nil
+	}
+	if msg.Title == "" {
+		return m.scheduleAITitle(msg.WorkspaceID, msg.TabID)
+	}
+	tab.mu.Lock()
+	tab.Name = msg.Title
+	tab.mu.Unlock()
+	m.noteTabsChanged()
+	return nil
+}

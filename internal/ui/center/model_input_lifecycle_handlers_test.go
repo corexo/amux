@@ -161,10 +161,17 @@ func TestUpdatePtyTabCreateResult_CreatesNewTab(t *testing.T) {
 		t.Fatalf("expected new tab to become active, got index %d", m.tabs.ActiveByWorkspace[wsID])
 	}
 
-	// The handler reports the new tab via messages.TabCreated.
-	created, ok := cmd().(messages.TabCreated)
-	if !ok {
-		t.Fatalf("expected messages.TabCreated, got %T", cmd())
+	// The handler reports the new tab via messages.TabCreated, batched with the
+	// AI-title arm message (drainBatch is defined in model_tabs_actions_test.go).
+	var created messages.TabCreated
+	found := false
+	for _, msg := range drainBatch(cmd) {
+		if tc, ok := msg.(messages.TabCreated); ok {
+			created, found = tc, true
+		}
+	}
+	if !found {
+		t.Fatalf("expected messages.TabCreated among the created-tab commands, got %#v", drainBatch(cmd))
 	}
 	if created.Index != 0 {
 		t.Fatalf("expected TabCreated index 0, got %d", created.Index)
