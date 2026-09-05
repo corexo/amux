@@ -46,6 +46,12 @@ func GlobalOptionValues(keys []string, opts Options) (map[string]string, error) 
 		return values, err
 	}
 	trimmed := strings.TrimRight(string(output), "\r\n")
+	// tmux < 3.5 escapes non-printable bytes in `display-message -p` output, so
+	// the raw 0x1F separator comes back as the literal four-character sequence
+	// `\037`. Normalize it before splitting, otherwise every requested key but
+	// the first reads as empty and the first swallows the whole row (which
+	// silently breaks the activity owner lease on tmux 3.4).
+	trimmed = strings.ReplaceAll(trimmed, `\037`, separator)
 	parts := strings.Split(trimmed, separator)
 	for i, key := range filtered {
 		if i >= len(parts) {
