@@ -228,7 +228,7 @@ func (m *Model) RestoreTabsFromWorkspace(ws *data.Workspace) tea.Cmd {
 		}
 		restoreCount++
 		tabID, sessionName, epoch := m.addPlaceholderTab(ws, tab)
-		cmds = append(cmds, m.reattachToSession(ws, tabID, tab.Assistant, sessionName, epoch))
+		cmds = append(cmds, m.reattachToSession(ws, tabID, tab.Assistant, sessionName, epoch, true))
 	}
 	if restoreCount > 0 {
 		desired := lastBeforeActive
@@ -244,7 +244,10 @@ func (m *Model) RestoreTabsFromWorkspace(ws *data.Workspace) tea.Cmd {
 }
 
 // AddTabsFromWorkspace adds new tabs without resetting existing UI state.
-func (m *Model) AddTabsFromWorkspace(ws *data.Workspace, tabs []data.TabInfo) tea.Cmd {
+// isRestore marks tabs as sourced from persisted workspace metadata (as
+// opposed to tabs discovered from already-live tmux sessions); reattachToSession
+// only relaunches a missing session with resume args when isRestore is true.
+func (m *Model) AddTabsFromWorkspace(ws *data.Workspace, tabs []data.TabInfo, isRestore bool) tea.Cmd {
 	if ws == nil || len(tabs) == 0 {
 		return nil
 	}
@@ -290,7 +293,7 @@ func (m *Model) AddTabsFromWorkspace(ws *data.Workspace, tabs []data.TabInfo) te
 			continue
 		}
 		tabID, sn, epoch := m.addPlaceholderTab(ws, tab)
-		cmds = append(cmds, m.reattachToSession(ws, tabID, tab.Assistant, sn, epoch))
+		cmds = append(cmds, m.reattachToSession(ws, tabID, tab.Assistant, sn, epoch, isRestore))
 	}
 	return common.SafeBatch(cmds...)
 }

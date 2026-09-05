@@ -16,7 +16,7 @@ import (
 
 func TestAddTabsFromWorkspace_NilWorkspaceReturnsNil(t *testing.T) {
 	m := newTestModel()
-	if cmd := m.AddTabsFromWorkspace(nil, []data.TabInfo{{Assistant: "claude"}}); cmd != nil {
+	if cmd := m.AddTabsFromWorkspace(nil, []data.TabInfo{{Assistant: "claude"}}, false); cmd != nil {
 		t.Fatalf("expected nil cmd for nil workspace, got %T", cmd())
 	}
 }
@@ -25,10 +25,10 @@ func TestAddTabsFromWorkspace_EmptyTabsReturnsNil(t *testing.T) {
 	m := newTestModel()
 	ws := newTestWorkspace("ws", "/repo/ws")
 
-	if cmd := m.AddTabsFromWorkspace(ws, nil); cmd != nil {
+	if cmd := m.AddTabsFromWorkspace(ws, nil, false); cmd != nil {
 		t.Fatalf("expected nil cmd for nil tabs, got %T", cmd())
 	}
-	if cmd := m.AddTabsFromWorkspace(ws, []data.TabInfo{}); cmd != nil {
+	if cmd := m.AddTabsFromWorkspace(ws, []data.TabInfo{}, false); cmd != nil {
 		t.Fatalf("expected nil cmd for empty tabs, got %T", cmd())
 	}
 }
@@ -38,7 +38,7 @@ func TestAddTabsFromWorkspace_NilConfigReturnsNil(t *testing.T) {
 	m.config = nil
 	ws := newTestWorkspace("ws", "/repo/ws")
 
-	if cmd := m.AddTabsFromWorkspace(ws, []data.TabInfo{{Assistant: "claude", Status: "detached"}}); cmd != nil {
+	if cmd := m.AddTabsFromWorkspace(ws, []data.TabInfo{{Assistant: "claude", Status: "detached"}}, false); cmd != nil {
 		t.Fatalf("expected nil cmd for nil config, got %T", cmd())
 	}
 	if got := len(m.tabs.ByWorkspace[string(ws.ID())]); got != 0 {
@@ -51,7 +51,7 @@ func TestAddTabsFromWorkspace_NilAssistantsMapReturnsNil(t *testing.T) {
 	m.config = &config.Config{Assistants: nil}
 	ws := newTestWorkspace("ws", "/repo/ws")
 
-	if cmd := m.AddTabsFromWorkspace(ws, []data.TabInfo{{Assistant: "claude", Status: "detached"}}); cmd != nil {
+	if cmd := m.AddTabsFromWorkspace(ws, []data.TabInfo{{Assistant: "claude", Status: "detached"}}, false); cmd != nil {
 		t.Fatalf("expected nil cmd when Assistants map is nil, got %T", cmd())
 	}
 }
@@ -73,7 +73,7 @@ func TestAddTabsFromWorkspace_SkipsFilteredTabs(t *testing.T) {
 			ws := newTestWorkspace("ws", "/repo/ws")
 			wsID := string(ws.ID())
 
-			cmd := m.AddTabsFromWorkspace(ws, []data.TabInfo{tc.info})
+			cmd := m.AddTabsFromWorkspace(ws, []data.TabInfo{tc.info}, false)
 			if cmd != nil {
 				t.Fatalf("expected nil cmd when the only tab is filtered, got %T", cmd())
 			}
@@ -91,7 +91,7 @@ func TestAddTabsFromWorkspace_AddsDetachedTabWithoutCommand(t *testing.T) {
 
 	cmd := m.AddTabsFromWorkspace(ws, []data.TabInfo{
 		{Assistant: "claude", Name: "Claude", Status: "detached", SessionName: "sess-detached"},
-	})
+	}, false)
 	// A detached tab is materialized synchronously and needs no reattach cmd.
 	if cmd != nil {
 		t.Fatalf("expected nil cmd for a detached-only batch, got %T", cmd())
@@ -123,7 +123,7 @@ func TestAddTabsFromWorkspace_AddsRunningPlaceholderWithCommand(t *testing.T) {
 
 	cmd := m.AddTabsFromWorkspace(ws, []data.TabInfo{
 		{Assistant: "claude", Name: "Claude", Status: "running", SessionName: "sess-running"},
-	})
+	}, false)
 	// A running tab is added as a placeholder and queued for async reattach.
 	if cmd == nil {
 		t.Fatal("expected a reattach cmd for a running tab")
@@ -156,7 +156,7 @@ func TestAddTabsFromWorkspace_SkipsSessionAlreadyOpen(t *testing.T) {
 
 	cmd := m.AddTabsFromWorkspace(ws, []data.TabInfo{
 		{Assistant: "claude", Status: "detached", SessionName: "sess-1"},
-	})
+	}, false)
 	if cmd != nil {
 		t.Fatalf("expected nil cmd when the session is already open, got %T", cmd())
 	}
@@ -173,7 +173,7 @@ func TestAddTabsFromWorkspace_DedupesSessionWithinBatch(t *testing.T) {
 	cmd := m.AddTabsFromWorkspace(ws, []data.TabInfo{
 		{Assistant: "claude", Status: "detached", SessionName: "dup"},
 		{Assistant: "claude", Status: "detached", SessionName: "dup"},
-	})
+	}, false)
 	if cmd != nil {
 		t.Fatalf("expected nil cmd for detached-only batch, got %T", cmd())
 	}
@@ -199,7 +199,7 @@ func TestAddTabsFromWorkspace_MatchesExistingTabAgentSession(t *testing.T) {
 
 	cmd := m.AddTabsFromWorkspace(ws, []data.TabInfo{
 		{Assistant: "claude", Status: "detached", SessionName: "agent-sess"},
-	})
+	}, false)
 	if cmd != nil {
 		t.Fatalf("expected nil cmd when session matches an existing tab's agent session, got %T", cmd())
 	}
@@ -217,7 +217,7 @@ func TestAddTabsFromWorkspace_EmptySessionAddsEachTab(t *testing.T) {
 	cmd := m.AddTabsFromWorkspace(ws, []data.TabInfo{
 		{Assistant: "claude", Status: "detached"},
 		{Assistant: "claude", Status: "detached"},
-	})
+	}, false)
 	if cmd != nil {
 		t.Fatalf("expected nil cmd for detached-only batch, got %T", cmd())
 	}
@@ -237,7 +237,7 @@ func TestAddTabsFromWorkspace_MixedBatchAddsAllAndBatchesRunning(t *testing.T) {
 		{Assistant: "codex", Status: "running", SessionName: "r2"},
 		{Assistant: "unknown", Status: "running", SessionName: "x1"}, // filtered
 		{Assistant: "claude", Status: "stopped", SessionName: "s1"},  // filtered
-	})
+	}, false)
 	if cmd == nil {
 		t.Fatal("expected a batched cmd because the batch contains running tabs")
 	}

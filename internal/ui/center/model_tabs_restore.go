@@ -118,7 +118,7 @@ func (m *Model) addPlaceholderTab(ws *data.Workspace, info data.TabInfo) (TabID,
 // reattachToSession returns a tea.Cmd that asynchronously connects a placeholder
 // tab to its tmux session. On success it produces ptyTabReattachResult which
 // updates the tab in-place (by TabID). On failure it produces ptyTabReattachFailed.
-func (m *Model) reattachToSession(ws *data.Workspace, tabID TabID, assistant, sessionName string, epoch uint64) tea.Cmd {
+func (m *Model) reattachToSession(ws *data.Workspace, tabID TabID, assistant, sessionName string, epoch uint64, isRestore bool) tea.Cmd {
 	termWidth, termHeight := m.sessionBootstrapViewportSize()
 	tm := m.terminalMetrics()
 	attachWidth := tm.Width
@@ -133,6 +133,63 @@ func (m *Model) reattachToSession(ws *data.Workspace, tabID TabID, assistant, se
 				Epoch:       epoch,
 				Err:         err,
 				Action:      "reattach",
+			}
+		}
+		// A restore (startup hydration of a persisted tab) whose tmux session is
+		// truly gone - e.g. a machine/WSL restart wiped the tmux server - has no
+		// pane to reattach to, so it launches a fresh one instead, with resume
+		// args if the assistant has any configured. This never kills a session:
+		// a live-but-paneless session (state.Exists && !state.HasLivePane) still
+		// falls through to the Stopped outcome below, exactly like a non-restore
+		// reattach; only the explicit restart path (RestartActiveTab) tears down
+		// and recreates a session.
+		if isRestore && !state.Exists {
+			tags := tmux.SessionTags{
+				WorkspaceID:  string(ws.ID()),
+				TabID:        string(tabID),
+				Type:         "agent",
+				Assistant:    assistant,
+				CreatedAt:    time.Now().Unix(),
+				InstanceID:   m.instanceID,
+				SessionOwner: m.instanceID,
+				LeaseAtMS:    time.Now().UnixMilli(),
+			}
+			ptyRows, ptyCols, _ := appPty.WinsizeFromInts(attachHeight, attachWidth)
+			agent, err := createAgentWithTagsFn(
+				m.agentManager,
+				ws,
+				appPty.AgentType(assistant),
+				sessionName,
+				ptyRows,
+				ptyCols,
+				tags,
+				true,
+			)
+			if err != nil {
+				return ptyTabReattachFailed{
+					WorkspaceID: string(ws.ID()),
+					TabID:       tabID,
+					Epoch:       epoch,
+					Err:         err,
+					Stopped:     true,
+					Action:      "reattach",
+				}
+			}
+			captureCols, captureRows := sessionHistoryCaptureSize(sessionName, attachWidth, attachHeight, opts)
+			scrollback, _ := capturePaneFn(sessionName, opts)
+			return ptyTabReattachResult{
+				WorkspaceID: string(ws.ID()),
+				TabID:       tabID,
+				Epoch:       epoch,
+				Agent:       agent,
+				Rows:        captureRows,
+				Cols:        captureCols,
+				SessionRestoreCapture: ptyio.SessionRestoreCapture{
+					ScrollbackCapture: scrollback,
+					CaptureFullPane:   false,
+					SnapshotCols:      attachWidth,
+					SnapshotRows:      attachHeight,
+				},
 			}
 		}
 		if !state.Exists || !state.HasLivePane {
@@ -170,6 +227,7 @@ func (m *Model) reattachToSession(ws *data.Workspace, tabID TabID, assistant, se
 			ptyRows,
 			ptyCols,
 			tags,
+			false,
 		)
 		if err != nil {
 			rollbackExistingSessionBootstrap(sessionName, bootstrap, opts)

@@ -87,6 +87,64 @@ func TestDefaultConfigLoadsAssistantOverrides(t *testing.T) {
 	}
 }
 
+// TestDefaultConfigResumeArgs covers the resume_args merge semantics: (a)
+// registry defaults for agents that ship one land in DefaultConfig
+// unmodified, (b) an override that touches a different field keeps the
+// registry's resume_args default, (c) an explicit "resume_args": "" in the
+// override disables it, and (d) a brand-new custom assistant with no
+// resume_args field at all stays empty.
+func TestDefaultConfigResumeArgs(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	configPath := filepath.Join(home, ".amux", "config.json")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	content := `{
+  "assistants": {
+    "claude": { "command": "my-claude-wrapper" },
+    "pi": { "resume_args": "" },
+    "myagent": { "command": "myagent" }
+  }
+}`
+	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := DefaultConfig()
+	if err != nil {
+		t.Fatalf("DefaultConfig() error = %v", err)
+	}
+
+	tests := []struct {
+		name        string
+		assistant   string
+		wantResume  string
+		wantCommand string
+	}{
+		{"registry default reaches config untouched: omp", "omp", "--continue", "omp"},
+		{"registry default reaches config untouched: opencode", "opencode", "--continue", "opencode"},
+		{"override of another field keeps the resume default: claude", "claude", "--continue", "my-claude-wrapper"},
+		{"explicit empty string in the override disables resume: pi", "pi", "", "pi"},
+		{"custom assistant without the field stays empty: myagent", "myagent", "", "myagent"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := cfg.Assistants[tt.assistant]
+			if !ok {
+				t.Fatalf("expected assistant %q to exist", tt.assistant)
+			}
+			if got.ResumeArgs != tt.wantResume {
+				t.Fatalf("Assistants[%q].ResumeArgs = %q, want %q", tt.assistant, got.ResumeArgs, tt.wantResume)
+			}
+			if got.Command != tt.wantCommand {
+				t.Fatalf("Assistants[%q].Command = %q, want %q", tt.assistant, got.Command, tt.wantCommand)
+			}
+		})
+	}
+}
+
 func TestDefaultConfigKeepsAssistantOverridesWhenUISectionIsInvalid(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
