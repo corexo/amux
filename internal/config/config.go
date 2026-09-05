@@ -323,6 +323,9 @@ func saveAssistants(path string, assistants map[string]AssistantConfig) error {
 		if cfg.InterruptDelayMs > 0 {
 			entry["interrupt_delay_ms"] = cfg.InterruptDelayMs
 		}
+		if cfg.ResumeArgs != "" {
+			entry["resume_args"] = cfg.ResumeArgs
+		}
 		out[name] = entry
 	}
 	payload["assistants"] = out
