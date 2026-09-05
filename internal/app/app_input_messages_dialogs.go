@@ -11,6 +11,7 @@ import (
 	"github.com/andyrewlee/amux/internal/logging"
 	"github.com/andyrewlee/amux/internal/messages"
 	"github.com/andyrewlee/amux/internal/process"
+	"github.com/andyrewlee/amux/internal/ui/center"
 	"github.com/andyrewlee/amux/internal/ui/common"
 	"github.com/andyrewlee/amux/internal/validation"
 )
@@ -256,6 +257,25 @@ func (a *App) handleShowCleanupTmuxDialog() {
 		"Cleanup tmux sessions",
 		fmt.Sprintf("Kill all amux-* tmux sessions on server %q?", a.tmuxOptions.ServerName),
 	)
+	a.presentDialog(a.dialog)
+}
+
+// handleShowCloseTabDialog shows the confirm-before-closing-an-agent-tab
+// dialog. Guards re-entry like handleShowCleanupTmuxDialog: a dialog already
+// on screen is left alone rather than re-armed with a new pending target,
+// which would silently swap what a stray Enter on the visible dialog closes.
+func (a *App) handleShowCloseTabDialog(msg messages.ShowCloseTabDialog) {
+	if a.dialog != nil && a.dialog.Visible() {
+		return
+	}
+	a.dialogCloseTabWorkspaceID = msg.WorkspaceID
+	a.dialogCloseTabTabID = center.TabID(msg.TabID)
+	a.dialog = common.NewConfirmDialog(
+		DialogCloseTab,
+		"Close Agent Tab",
+		fmt.Sprintf("Close tab '%s'? The agent process will be stopped.", msg.TabName),
+	)
+	a.dialog.SetDefaultOption(1)
 	a.presentDialog(a.dialog)
 }
 

@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/andyrewlee/amux/internal/logging"
+	"github.com/andyrewlee/amux/internal/messages"
 	"github.com/andyrewlee/amux/internal/ui/common"
 )
 
@@ -186,4 +187,64 @@ func readAppDialogTestLog(t *testing.T, path string) string {
 		t.Fatalf("ReadFile(%q): %v", path, err)
 	}
 	return string(data)
+}
+
+func TestHandleShowCloseTabDialog_ConfirmedClosesTargetTab(t *testing.T) {
+	h := newDialogHarness(t)
+	tab := h.tabs[0]
+	wsID := string(tab.Workspace.ID())
+
+	h.app.handleShowCloseTabDialog(messages.ShowCloseTabDialog{
+		WorkspaceID: wsID,
+		TabID:       string(tab.ID),
+		TabName:     tab.Name,
+	})
+
+	cmd := h.app.handleDialogResult(common.DialogResult{ID: DialogCloseTab, Confirmed: true})
+	if cmd == nil {
+		t.Fatal("expected a command from the confirmed close")
+	}
+	if got, _ := h.app.center.GetTabsInfoForWorkspace(wsID); len(got) != 0 {
+		t.Fatalf("expected the tab to be closed, got %d tabs remaining", len(got))
+	}
+}
+
+func TestHandleShowCloseTabDialog_DeclinedClosesNothing(t *testing.T) {
+	h := newDialogHarness(t)
+	tab := h.tabs[0]
+	wsID := string(tab.Workspace.ID())
+
+	h.app.handleShowCloseTabDialog(messages.ShowCloseTabDialog{
+		WorkspaceID: wsID,
+		TabID:       string(tab.ID),
+		TabName:     tab.Name,
+	})
+
+	if cmd := h.app.handleDialogResult(common.DialogResult{ID: DialogCloseTab, Confirmed: false}); cmd != nil {
+		t.Fatal("expected no command when the close is declined")
+	}
+	if got, _ := h.app.center.GetTabsInfoForWorkspace(wsID); len(got) != 1 {
+		t.Fatalf("expected the tab to remain, got %d tabs", len(got))
+	}
+	if h.app.dialogCloseTabWorkspaceID != "" || h.app.dialogCloseTabTabID != "" {
+		t.Fatal("expected the pending close-tab target to be cleared on decline")
+	}
+}
+
+func TestHandleShowCloseTabDialog_ConfirmedUnknownTargetIsNoop(t *testing.T) {
+	h := newDialogHarness(t)
+	wsID := string(h.tabs[0].Workspace.ID())
+
+	h.app.handleShowCloseTabDialog(messages.ShowCloseTabDialog{
+		WorkspaceID: wsID,
+		TabID:       "does-not-exist",
+		TabName:     "ghost",
+	})
+
+	if cmd := h.app.handleDialogResult(common.DialogResult{ID: DialogCloseTab, Confirmed: true}); cmd != nil {
+		t.Fatal("expected no command when the target tab no longer exists")
+	}
+	if got, _ := h.app.center.GetTabsInfoForWorkspace(wsID); len(got) != 1 {
+		t.Fatalf("expected the existing tab to remain untouched, got %d tabs", len(got))
+	}
 }
