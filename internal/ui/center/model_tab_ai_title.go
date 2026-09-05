@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -28,6 +29,7 @@ const (
 	aiTitleDefaultCmd   = "claude -p"
 	aiTitleMaxLen       = 10
 	aiTitleDelay        = 20 * time.Second
+	aiTitleSweepEvery   = 15 * time.Second
 	aiTitleMaxAttempts  = 3
 	aiTitleCaptureLines = 60
 	aiTitleTimeout      = 45 * time.Second
@@ -36,13 +38,11 @@ const (
 		"no quotes, no punctuation, no explanation. If no task is identifiable yet, reply exactly -.\n\nTranscript:\n"
 )
 
-// aiTitleArm requests that the delayed first attempt be scheduled. Tab
-// creation emits this cheap message instead of the timer itself, so the
-// create-result command never carries a 20s tick a caller might run.
-type aiTitleArm struct {
-	WorkspaceID string
-	TabID       TabID
-}
+// aiTitleSweepTick drives the periodic scan for still-unnamed tabs. Titles are
+// armed by this sweep rather than at tab creation, because tabs also arrive
+// via session restore, tmux adoption and reattach — the sweep covers every one
+// of those paths from a single place.
+type aiTitleSweepTick struct{}
 
 // aiTitleTick asks for a title attempt for one tab.
 type aiTitleTick struct {
@@ -74,8 +74,73 @@ func aiTitleCommand() string {
 	return cmd
 }
 
-// scheduleAITitle arms the next title attempt for a tab. Returns nil when the
-// feature is disabled, so the tick never exists in that case.
+// scheduleAITitleSweep arms the next sweep. It always returns a command so the
+// center's Init has one shape regardless of the environment; the sweep handler
+// is where a disabled helper stops the loop.
+func (m *Model) scheduleAITitleSweep() tea.Cmd {
+	return common.SafeTick(aiTitleSweepEvery, func(time.Time) tea.Msg {
+		return aiTitleSweepTick{}
+	})
+}
+
+// updateAITitleSweep requests one title attempt per eligible tab and re-arms
+// the sweep. Eligible means: still carrying its auto-generated name, at least
+// aiTitleDelay old (so the agent has printed something), has a tmux session,
+// and has not been attempted yet.
+func (m *Model) updateAITitleSweep() tea.Cmd {
+	if aiTitleCommand() == "" {
+		return nil
+	}
+	cmds := []tea.Cmd{m.scheduleAITitleSweep()}
+	now := time.Now()
+	for wsID, tabs := range m.tabs.ByWorkspace {
+		for _, tab := range tabs {
+			if !aiTitleEligible(tab) {
+				continue
+			}
+			tab.mu.Lock()
+			attempts, createdAt, session := tab.aiTitleAttempts, tab.createdAt, tab.SessionName
+			tab.mu.Unlock()
+			if attempts > 0 || session == "" {
+				continue
+			}
+			if createdAt > 0 && now.Sub(time.Unix(createdAt, 0)) < aiTitleDelay {
+				continue
+			}
+			wsID, tabID := wsID, tab.ID
+			cmds = append(cmds, func() tea.Msg {
+				return aiTitleTick{WorkspaceID: wsID, TabID: tabID}
+			})
+		}
+	}
+	return common.SafeBatch(cmds...)
+}
+
+// aiTitleEligible reports whether a tab still carries the auto-generated name
+// ("claude", "pi 2", "Terminal") and may therefore be retitled. A name that
+// does not match that shape was set by the AI (or by the user) and is left
+// alone, which also keeps a persisted AI title stable across restarts.
+func aiTitleEligible(tab *Tab) bool {
+	if tab == nil || tab.isClosed() {
+		return false
+	}
+	name := strings.TrimSpace(tab.Name)
+	assistant := strings.TrimSpace(tab.Assistant)
+	if name == "" || name == "Terminal" {
+		return true
+	}
+	if assistant == "" || name == assistant {
+		return name == assistant
+	}
+	suffix, ok := strings.CutPrefix(name, assistant+" ")
+	if !ok {
+		return false
+	}
+	_, err := strconv.Atoi(suffix)
+	return err == nil
+}
+
+// scheduleAITitle re-arms a single tab's attempt after an inconclusive answer.
 func (m *Model) scheduleAITitle(wsID string, tabID TabID) tea.Cmd {
 	if aiTitleCommand() == "" {
 		return nil

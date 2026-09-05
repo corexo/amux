@@ -24,7 +24,7 @@ func New(cfg *config.Config) *Model {
 
 // Init initializes the center pane.
 func (m *Model) Init() tea.Cmd {
-	return nil
+	return m.scheduleAITitleSweep()
 }
 
 // Focus sets the focus state.

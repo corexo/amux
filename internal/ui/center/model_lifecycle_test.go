@@ -22,10 +22,15 @@ func newLifecycleModel(t *testing.T) (*Model, string) {
 	return m, string(ws.ID())
 }
 
-func TestInitReturnsNoCmd(t *testing.T) {
+// TestInitArmsAITitleSweep pins Init's only job: arming the periodic AI-title
+// sweep. The command must exist regardless of whether a helper command is
+// configured (updateAITitleSweep is where a disabled helper stops the loop),
+// so the shape never depends on the environment running the test. The command
+// itself is not run here — it wraps a 15s tick.
+func TestInitArmsAITitleSweep(t *testing.T) {
 	m := New(&config.Config{})
-	if cmd := m.Init(); cmd != nil {
-		t.Fatalf("Init should return a nil tea.Cmd, got %T", cmd)
+	if cmd := m.Init(); cmd == nil {
+		t.Fatal("Init should arm the AI-title sweep, got nil tea.Cmd")
 	}
 }
 
