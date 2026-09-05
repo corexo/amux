@@ -180,6 +180,16 @@ func TestIsKnownAssistant(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("hidden assistant is still known (restoring a tab must not break)", func(t *testing.T) {
+		app := &App{config: &config.Config{Assistants: map[string]config.AssistantConfig{
+			"claude": {Command: "claude"},
+			"codex":  {Command: "codex", Hidden: true},
+		}}}
+		if !app.isKnownAssistant("codex") {
+			t.Fatal("isKnownAssistant(\"codex\") = false, want true even though it is hidden from the picker")
+		}
+	})
 }
 
 // TestAssistantPickerOptionsAppendsTerminal asserts the new-tab picker offers
@@ -202,6 +212,43 @@ func TestAssistantPickerOptionsAppendsTerminal(t *testing.T) {
 	}
 	if !app.isKnownAssistant(data.TerminalAssistant) {
 		t.Fatalf("isKnownAssistant(%q) = false, want true", data.TerminalAssistant)
+	}
+}
+
+// TestAssistantPickerOptionsOmitsHidden asserts a Hidden assistant is filtered
+// out of the picker (but not out of assistantNames, the full roster used
+// elsewhere), and the terminal entry still trails the visible ones.
+func TestAssistantPickerOptionsOmitsHidden(t *testing.T) {
+	cfg := &config.Config{Assistants: map[string]config.AssistantConfig{
+		"claude": {Command: "claude"},
+		"codex":  {Command: "codex", Hidden: true},
+	}}
+	app := &App{config: cfg}
+
+	got := app.assistantPickerOptions()
+	want := []string{"claude", data.TerminalAssistant}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("assistantPickerOptions() = %#v, want %#v", got, want)
+	}
+	if full := app.assistantNames(); !reflect.DeepEqual(full, []string{"claude", "codex"}) {
+		t.Fatalf("assistantNames() = %#v, want hidden codex to remain in the full roster", full)
+	}
+}
+
+// TestAssistantPickerOptionsFallsBackWhenAllHidden covers the safety valve:
+// hiding every real assistant must not leave the picker empty. It falls back
+// to the full (unfiltered) roster instead.
+func TestAssistantPickerOptionsFallsBackWhenAllHidden(t *testing.T) {
+	cfg := &config.Config{Assistants: map[string]config.AssistantConfig{
+		"claude": {Command: "claude", Hidden: true},
+		"codex":  {Command: "codex", Hidden: true},
+	}}
+	app := &App{config: cfg}
+
+	got := app.assistantPickerOptions()
+	want := []string{"claude", "codex", data.TerminalAssistant}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("assistantPickerOptions() = %#v, want %#v (fallback to full roster)", got, want)
 	}
 }
 

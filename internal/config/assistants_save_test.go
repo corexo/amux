@@ -85,6 +85,52 @@ func TestSaveAssistantsWritesCommand(t *testing.T) {
 	}
 }
 
+// TestSaveAssistantsWritesHiddenTrueOmitsFalse mirrors the existing
+// zero-value-omission convention for interrupt fields: a true Hidden value is
+// written out, a false one is omitted entirely, and the write round-trips
+// back through the read/override path with Hidden intact.
+func TestSaveAssistantsWritesHiddenTrueOmitsFalse(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	assistants := map[string]AssistantConfig{
+		"codex": {Command: "codex", Hidden: true},
+		"droid": {Command: "droid", Hidden: false},
+	}
+
+	if err := saveAssistants(path, assistants); err != nil {
+		t.Fatalf("saveAssistants() error = %v", err)
+	}
+
+	section := readAssistantsSection(t, path)
+	codex, ok := section["codex"].(map[string]any)
+	if !ok {
+		t.Fatalf("assistants.codex missing or wrong type, got %#v", section["codex"])
+	}
+	if hidden, ok := codex["hidden"].(bool); !ok || !hidden {
+		t.Errorf("assistants.codex.hidden = %#v, want true", codex["hidden"])
+	}
+
+	droid, ok := section["droid"].(map[string]any)
+	if !ok {
+		t.Fatalf("assistants.droid missing or wrong type, got %#v", section["droid"])
+	}
+	if _, present := droid["hidden"]; present {
+		t.Errorf("assistants.droid.hidden = %#v, want omitted", droid["hidden"])
+	}
+
+	file, err := readConfigFile(path)
+	if err != nil {
+		t.Fatalf("readConfigFile() error = %v", err)
+	}
+	got := defaultAssistants()
+	applyAssistantOverrides(got, file.Assistants)
+	if !got["codex"].Hidden {
+		t.Errorf("round-trip codex.Hidden = false, want true")
+	}
+	if got["droid"].Hidden {
+		t.Errorf("round-trip droid.Hidden = true, want false")
+	}
+}
+
 func TestSaveAssistantsCreatesParentDirectories(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "a", "b", "c", "config.json")
 

@@ -39,6 +39,7 @@ The value fields (all optional) are:
 | `interrupt_count`    | number | Number of Ctrl-C signals amux sends to interrupt the agent.         |
 | `interrupt_delay_ms` | number | Delay, in milliseconds, between those Ctrl-C signals.               |
 | `resume_args`        | string | Args appended to `command` to resume a prior conversation on restore (see [Resuming a prior conversation on restore](#resuming-a-prior-conversation-on-restore)). |
+| `hidden`             | bool   | Removes this assistant from the `+new` picker (see [Hiding an assistant from the picker](#hiding-an-assistant-from-the-picker)). |
 
 Defaults applied when a value is kept: `interrupt_count` falls back to `1` if it
 is missing or not positive, and `interrupt_delay_ms` falls back to `0` if it is
@@ -140,6 +141,28 @@ config entry — there is no built-in default to fall back to:
 
 The built-in roster (default names) is: `claude`, `codex`, `opencode`, `droid`,
 `cursor`, `pi`, `omp`, `antigravity`, `fx`, `grok`, `amp`, `cline`.
+
+## Hiding an assistant from the picker
+
+If you have an assistant configured (built-in or custom) whose CLI you don't
+actually have installed, set `hidden` to keep it out of the `+new` agent
+picker without deleting its config entry:
+
+```json
+{
+  "assistants": {
+    "codex": { "hidden": true }
+  }
+}
+```
+
+`hidden` only removes the entry from the `+new` picker. It does **not**
+deactivate the assistant: an existing tab already running that assistant
+keeps working exactly as before, and restoring a tab after a restart still
+works even if its assistant is hidden. If hiding would leave the picker with
+no real assistant at all, amux falls back to showing the full (unfiltered)
+roster rather than an empty picker. Defaults to `false` (visible) when
+omitted.
 
 ## AI tab titles (`AMUX_TITLE_CMD`)
 
