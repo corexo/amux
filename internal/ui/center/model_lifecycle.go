@@ -72,10 +72,21 @@ func (m *Model) SetCanFocusRight(can bool) {
 	m.canFocusRight = can
 }
 
-// SetShowKeymapHints controls whether helper text is rendered.
+// SetShowKeymapHints controls whether helper text is rendered. The hint bar
+// takes its rows from the terminal area, so toggling it must re-apply the
+// terminal sizes: otherwise every vterm/PTY keeps the taller pre-toggle height
+// while View pads to the shorter one, and the bottom rows of the agent's
+// output — a dialog anchored at the bottom, most visibly — are truncated until
+// the next window resize. Mirrors sidebar.TerminalModel.SetShowKeymapHints.
 func (m *Model) SetShowKeymapHints(show bool) {
+	if m.showKeymapHints == show {
+		return
+	}
 	m.showKeymapHints = show
 	m.markHelpDirty()
+	if m.width > 0 && m.height > 0 {
+		m.SetSize(m.width, m.height)
+	}
 }
 
 // SetStyles updates the component's styles (for theme changes).
