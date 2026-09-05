@@ -48,6 +48,7 @@ func installPostAttachDemotionSeams(t *testing.T, calls *[]string, postAttach tm
 		sessionName string,
 		rows, cols uint16,
 		tags tmux.SessionTags,
+		resume bool,
 	) (*appPty.Agent, error) {
 		*calls = append(*calls, "attach")
 		return &appPty.Agent{Session: sessionName}, nil
@@ -126,7 +127,7 @@ func TestReattachToSession_DiscardsPreAttachSnapshotWhenSessionRecreated(t *test
 	setKnownViewport(m)
 	ws := newTestWorkspace("ws", "/repo/ws")
 
-	msg := m.reattachToSession(ws, TabID("tab-restore-race"), "codex", "session-race", 1)()
+	msg := m.reattachToSession(ws, TabID("tab-restore-race"), "codex", "session-race", 1, true)()
 	result, ok := msg.(ptyTabReattachResult)
 	if !ok {
 		t.Fatalf("expected ptyTabReattachResult, got %T", msg)

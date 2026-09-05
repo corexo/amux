@@ -38,6 +38,7 @@ The value fields (all optional) are:
 | `command`            | string | Shell command amux runs to launch the assistant.                    |
 | `interrupt_count`    | number | Number of Ctrl-C signals amux sends to interrupt the agent.         |
 | `interrupt_delay_ms` | number | Delay, in milliseconds, between those Ctrl-C signals.               |
+| `resume_args`        | string | Args appended to `command` to resume a prior conversation on restore (see [Resuming a prior conversation on restore](#resuming-a-prior-conversation-on-restore)). |
 
 Defaults applied when a value is kept: `interrupt_count` falls back to `1` if it
 is missing or not positive, and `interrupt_delay_ms` falls back to `0` if it is
@@ -88,6 +89,51 @@ its interrupt behavior:
 {
   "assistants": {
     "claude": { "command": "my-claude-wrapper" }
+  }
+}
+```
+
+## Resuming a prior conversation on restore
+
+Some assistants can resume a previous conversation instead of starting blank.
+The optional `resume_args` field names the flag(s) amux appends to `command`
+to do that:
+
+```json
+{
+  "assistants": {
+    "codex": { "command": "codex", "resume_args": "resume --last" }
+  }
+}
+```
+
+This only ever applies when amux restores a persisted tab and finds its tmux
+session gone — the ordinary shape of a machine or WSL restart, where the tmux
+server (and every session in it) is gone but the tab list is still on disk.
+Reattaching to a tab whose session is still alive, opening a new tab, and an
+explicit restart all keep launching the assistant fresh, exactly as before.
+
+The resume attempt is fail-soft: amux runs `<command> <resume_args>`, and only
+falls back to a plain `<command>` launch if that exits almost immediately —
+there was nothing to resume yet (e.g. a tab that was never actually used). A
+resumed session that runs for a while and then exits normally, including the
+user quitting it with Ctrl-C, drops to the shell prompt instead of silently
+spawning another agent.
+
+Built-in defaults: `claude`, `pi`, `omp`, `antigravity`, and `opencode` ship a
+`resume_args` value (`--continue` or the assistant's equivalent); the
+remaining built-ins (`codex`, `droid`, `cursor`, `fx`, `grok`, `amp`, `cline`)
+ship none and always launch fresh. An override that omits `resume_args` keeps
+the built-in default; setting it to `""` explicitly disables resume for that
+assistant.
+
+A custom (non-built-in) assistant gets resume behavior purely from its own
+config entry — there is no built-in default to fall back to:
+
+```json
+{
+  "assistants": {
+    "gemini": { "command": "gemini", "resume_args": "--resume latest" }
   }
 }
 ```

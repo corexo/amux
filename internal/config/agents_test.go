@@ -108,9 +108,10 @@ func TestAgentRegistryIsCanonical(t *testing.T) {
 		got := assistants[def.Name]
 		if got.Command != def.DefaultCommand ||
 			got.InterruptCount != def.InterruptCount ||
-			got.InterruptDelayMs != def.InterruptDelayMs {
-			t.Errorf("defaultAssistants[%q] = %+v; want command=%q count=%d delay=%d",
-				def.Name, got, def.DefaultCommand, def.InterruptCount, def.InterruptDelayMs)
+			got.InterruptDelayMs != def.InterruptDelayMs ||
+			got.ResumeArgs != def.ResumeArgs {
+			t.Errorf("defaultAssistants[%q] = %+v; want command=%q count=%d delay=%d resumeArgs=%q",
+				def.Name, got, def.DefaultCommand, def.InterruptCount, def.InterruptDelayMs, def.ResumeArgs)
 		}
 	}
 }

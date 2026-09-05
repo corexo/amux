@@ -68,11 +68,11 @@ func (m *AgentManager) getTmuxOptions() tmux.Options {
 
 // CreateAgent creates a new agent for the given workspace.
 func (m *AgentManager) CreateAgent(ws *data.Workspace, agentType AgentType, sessionName string, rows, cols uint16) (*Agent, error) {
-	return m.CreateAgentWithTags(ws, agentType, sessionName, rows, cols, tmux.SessionTags{})
+	return m.CreateAgentWithTags(ws, agentType, sessionName, rows, cols, tmux.SessionTags{}, false)
 }
 
 // CreateAgentWithTags creates a new agent for the given workspace with tmux tags.
-func (m *AgentManager) CreateAgentWithTags(ws *data.Workspace, agentType AgentType, sessionName string, rows, cols uint16, tags tmux.SessionTags) (*Agent, error) {
+func (m *AgentManager) CreateAgentWithTags(ws *data.Workspace, agentType AgentType, sessionName string, rows, cols uint16, tags tmux.SessionTags, resume bool) (*Agent, error) {
 	if ws == nil {
 		return nil, errors.New("workspace is required")
 	}
@@ -105,10 +105,8 @@ func (m *AgentManager) CreateAgentWithTags(ws *data.Workspace, agentType AgentTy
 		return nil, err
 	}
 
-	// Execute agent, then reset terminal state and drop to shell
-	// Reset sequence: stty sane (terminal modes), exit alt screen, show cursor, reset attrs, RIS
-	// Use -l flag to start login shell so .zshrc/.bashrc are loaded
-	fullCommand := fmt.Sprintf("%s; stty sane; printf '\\033[?1049l\\033[?25h\\033[0m\\033c'; echo 'Agent exited. Dropping to shell...'; export TERM=xterm-256color; %s", assistantCfg.Command, loginShellCommand)
+	// Execute agent, then reset terminal state and drop to shell.
+	fullCommand := agentLaunchCommand(assistantCfg, loginShellCommand, resume)
 
 	termCommand := tmux.NewClientCommand(sessionName, tmux.ClientCommandParams{
 		WorkDir:        ws.Root,
@@ -136,6 +134,36 @@ func (m *AgentManager) CreateAgentWithTags(ws *data.Workspace, agentType AgentTy
 	m.mu.Unlock()
 
 	return agent, nil
+}
+
+// agentLaunchCommand builds the tmux client shell command: launch the
+// assistant, then reset terminal state and drop to a login shell on exit.
+// Reset sequence: stty sane (terminal modes), exit alt screen, show cursor,
+// reset attrs, RIS. Use -l flag to start login shell so .zshrc/.bashrc are
+// loaded.
+//
+// resume only takes effect when the assistant has non-empty ResumeArgs. The
+// resume attempt is timed and fail-soft: a prior conversation may not exist
+// yet (e.g. first-ever launch in this worktree), and a dead pane is worse
+// than a fresh start. But falling back on ANY nonzero exit is wrong too - a
+// user who Ctrl-Cs the assistant after a long session (e.g. exit 130) would
+// get a brand-new agent instead of the shell prompt they expect. So the
+// fallback only fires when the resume attempt dies almost immediately
+// (within resumeExitGraceWindowSeconds), which is what "no prior
+// conversation to resume" looks like; a later exit falls through to the
+// existing reset+login-shell tail unchanged. Written in POSIX sh (no
+// $SECONDS or other bashisms) because the tmux client shell may be plain sh.
+const resumeExitGraceWindowSeconds = 5
+
+func agentLaunchCommand(assistantCfg config.AssistantConfig, loginShellCommand string, resume bool) string {
+	launch := assistantCfg.Command
+	if resume && assistantCfg.ResumeArgs != "" {
+		launch = fmt.Sprintf(
+			"s=$(date +%%s); %s %s; rc=$?; e=$(date +%%s); if [ \"$rc\" -ne 0 ] && [ $((e-s)) -lt %d ]; then %s; fi",
+			assistantCfg.Command, assistantCfg.ResumeArgs, resumeExitGraceWindowSeconds, assistantCfg.Command,
+		)
+	}
+	return fmt.Sprintf("%s; stty sane; printf '\\033[?1049l\\033[?25h\\033[0m\\033c'; echo 'Agent exited. Dropping to shell...'; export TERM=xterm-256color; %s", launch, loginShellCommand)
 }
 
 // CreateViewer creates a new agent (viewer) for the given workspace and command.

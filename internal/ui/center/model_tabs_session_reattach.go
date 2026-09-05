@@ -29,8 +29,9 @@ var (
 		sessionName string,
 		rows, cols uint16,
 		tags tmux.SessionTags,
+		resume bool,
 	) (*appPty.Agent, error) {
-		return manager.CreateAgentWithTags(ws, agentType, sessionName, rows, cols, tags)
+		return manager.CreateAgentWithTags(ws, agentType, sessionName, rows, cols, tags, resume)
 	}
 )
 
@@ -181,6 +182,7 @@ func (m *Model) ReattachActiveTab() tea.Cmd {
 				ptyRows,
 				ptyCols,
 				tags,
+				false,
 			)
 			if err != nil {
 				return ptyTabReattachFailed{
@@ -234,6 +236,7 @@ func (m *Model) ReattachActiveTab() tea.Cmd {
 			ptyRows,
 			ptyCols,
 			tags,
+			false,
 		)
 		if err != nil {
 			rollbackExistingSessionBootstrap(sessionName, bootstrap, opts)
@@ -366,6 +369,7 @@ func (m *Model) RestartActiveTab() tea.Cmd {
 			ptyRows,
 			ptyCols,
 			tags,
+			false,
 		)
 		if err != nil {
 			return ptyTabReattachFailed{

@@ -10,20 +10,21 @@ type AgentDef struct {
 	DefaultCommand   string // shell command used to launch the agent
 	InterruptCount   int    // number of Ctrl-C signals to send (claude needs 2)
 	InterruptDelayMs int    // delay between interrupts in milliseconds
+	ResumeArgs       string // args appended to the command to resume a prior conversation on restore; empty means always launch fresh
 }
 
 // AgentRegistry is the ordered roster of supported agents. The order here
 // defines the preferred display order used throughout the UI. Keep it as the
 // only place new agents are declared.
 var AgentRegistry = []AgentDef{
-	{Name: "claude", DefaultCommand: "claude", InterruptCount: 2, InterruptDelayMs: 200},
+	{Name: "claude", DefaultCommand: "claude", InterruptCount: 2, InterruptDelayMs: 200, ResumeArgs: "--continue"},
 	{Name: "codex", DefaultCommand: "codex", InterruptCount: 1, InterruptDelayMs: 0},
-	{Name: "opencode", DefaultCommand: "opencode", InterruptCount: 1, InterruptDelayMs: 0},
+	{Name: "opencode", DefaultCommand: "opencode", InterruptCount: 1, InterruptDelayMs: 0, ResumeArgs: "--continue"},
 	{Name: "droid", DefaultCommand: "droid", InterruptCount: 1, InterruptDelayMs: 0},
 	{Name: "cursor", DefaultCommand: "agent", InterruptCount: 1, InterruptDelayMs: 0},
-	{Name: "pi", DefaultCommand: "pi", InterruptCount: 1, InterruptDelayMs: 0},
-	{Name: "omp", DefaultCommand: "omp", InterruptCount: 1, InterruptDelayMs: 0},
-	{Name: "antigravity", DefaultCommand: "agy", InterruptCount: 1, InterruptDelayMs: 0},
+	{Name: "pi", DefaultCommand: "pi", InterruptCount: 1, InterruptDelayMs: 0, ResumeArgs: "--continue"},
+	{Name: "omp", DefaultCommand: "omp", InterruptCount: 1, InterruptDelayMs: 0, ResumeArgs: "--continue"},
+	{Name: "antigravity", DefaultCommand: "agy", InterruptCount: 1, InterruptDelayMs: 0, ResumeArgs: "--continue"},
 	{Name: "fx", DefaultCommand: "fx", InterruptCount: 1, InterruptDelayMs: 0},
 	{Name: "grok", DefaultCommand: "grok", InterruptCount: 1, InterruptDelayMs: 0},
 	{Name: "amp", DefaultCommand: "amp", InterruptCount: 1, InterruptDelayMs: 0},
