@@ -41,6 +41,7 @@ func TestReattachActiveTab_SnapshotCommandErrorFallsBackToHistoryOnly(t *testing
 		sessionName string,
 		rows, cols uint16,
 		tags tmux.SessionTags,
+		resume bool,
 	) (*appPty.Agent, error) {
 		calls = append(calls, "attach")
 		return &appPty.Agent{Session: sessionName}, nil

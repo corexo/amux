@@ -46,7 +46,7 @@ func TestAgentManager_CreateAgentWithTags_RegistersAgent(t *testing.T) {
 	sessionName := fmt.Sprintf("amux-test-agent-%d", time.Now().UnixNano())
 	agentType := AgentType("claude") // testConfig(): Command "echo claude" — harmless, spawnable.
 
-	agent, err := m.CreateAgentWithTags(ws, agentType, sessionName, 24, 80, tmux.SessionTags{})
+	agent, err := m.CreateAgentWithTags(ws, agentType, sessionName, 24, 80, tmux.SessionTags{}, false)
 	if err != nil {
 		t.Fatalf("CreateAgentWithTags failed: %v", err)
 	}

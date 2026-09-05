@@ -145,7 +145,7 @@ func (a *App) rebindActiveSelectionForLoad(loadToken projectsLoadToken) []tea.Cm
 				shouldHydrateTabs = false
 			}
 			if shouldHydrateTabs {
-				if cmd := a.center.AddTabsFromWorkspace(ws, ws.OpenTabs); cmd != nil {
+				if cmd := a.center.AddTabsFromWorkspace(ws, ws.OpenTabs, true); cmd != nil {
 					cmds = append(cmds, cmd)
 				}
 			}
