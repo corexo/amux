@@ -147,6 +147,15 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		m.clearTabActorRedrawPending()
 		return m, nil
 
+	case aiTitleArm:
+		return m, m.scheduleAITitle(msg.WorkspaceID, msg.TabID)
+
+	case aiTitleTick:
+		return m, m.updateAITitleTick(msg)
+
+	case aiTitleResult:
+		return m, m.updateAITitleResult(msg)
+
 	case PTYOutput:
 		cmd := m.updatePTYOutput(msg)
 		cmds = append(cmds, cmd)

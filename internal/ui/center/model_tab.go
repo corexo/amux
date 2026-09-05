@@ -106,6 +106,10 @@ type Tab struct {
 	lastFocusedAt  time.Time
 
 	createdAt int64 // Unix timestamp for ordering; persisted in workspace.json
+
+	// aiTitleAttempts counts AI-title helper runs for this tab (guarded by mu),
+	// capping retries when the helper keeps returning nothing usable.
+	aiTitleAttempts int
 }
 
 // tabActivityState groups chat-activity detection state: visible-output

@@ -140,3 +140,25 @@ config entry — there is no built-in default to fall back to:
 
 The built-in roster (default names) is: `claude`, `codex`, `opencode`, `droid`,
 `cursor`, `pi`, `omp`, `antigravity`, `fx`, `grok`, `amp`, `cline`.
+
+## AI tab titles (`AMUX_TITLE_CMD`)
+
+A new agent tab starts with a static name (`claude`, `codex-2`). About 20
+seconds in, amux captures the last 60 lines of the tab's tmux pane, pipes them
+to a helper command on stdin, and uses the first line it prints as the tab
+title — capped at **10 characters**, whitespace and quotes stripped. A helper
+that answers `-` (or fails) leaves the name alone and is retried up to 3 times.
+
+| `AMUX_TITLE_CMD`      | Behavior                                               |
+|-----------------------|--------------------------------------------------------|
+| unset                 | `claude -p` when the `claude` CLI is on PATH, else off  |
+| `off` / `none` / `0`  | disabled                                               |
+| any command           | run via `sh -c`, transcript on stdin, title on stdout  |
+
+```sh
+AMUX_TITLE_CMD="codex exec -" amux     # use a different agent CLI
+AMUX_TITLE_CMD=off amux                # no AI calls at all
+```
+
+Titles are persisted with the tab, so a reattached tab keeps its generated
+name and no further AI calls are made for it.
