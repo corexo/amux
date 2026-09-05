@@ -14,7 +14,6 @@ import (
 	"github.com/andyrewlee/amux/internal/messages"
 	appPty "github.com/andyrewlee/amux/internal/pty"
 	"github.com/andyrewlee/amux/internal/tmux"
-	"github.com/andyrewlee/amux/internal/ui/common"
 	"github.com/andyrewlee/amux/internal/ui/ptyio"
 	"github.com/andyrewlee/amux/internal/vterm"
 )
@@ -375,14 +374,9 @@ func (m *Model) handlePtyTabCreated(msg ptyTabCreateResult) tea.Cmd {
 	}
 	m.noteTabsChanged()
 
-	// Fresh tabs only: a reattached tab keeps the (possibly AI-generated) name
-	// it was persisted with.
-	return common.SafeBatch(
-		func() tea.Msg {
-			return messages.TabCreated{Index: createdIdx, Name: displayName}
-		},
-		func() tea.Msg {
-			return aiTitleArm{WorkspaceID: wsID, TabID: tabID}
-		},
-	)
+	// The AI-title sweep (model_tab_ai_title.go) picks this tab up on its next
+	// pass, so tab creation stays a plain TabCreated report.
+	return func() tea.Msg {
+		return messages.TabCreated{Index: createdIdx, Name: displayName}
+	}
 }
