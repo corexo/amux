@@ -297,11 +297,19 @@ func paneCoversVisibleWindow(paneID string, opts Options) (bool, error) {
 // authoritative snapshot at the size a reattached client will render.
 // A missing session needs no has-session pre-check: runTmux already treats
 // tmux's exit code 1 for a missing target as success.
+//
+// `resize-window -x/-y` pins the window to `window-size manual`, and tmux
+// never lifts that by itself: the window would then ignore every later client
+// size, so maximizing the amux window leaves the pane stuck at its old size
+// while tmux pads the surplus client area with dots. Unsetting the window
+// option restores the inherited (latest) sizing without changing the size now,
+// so the snapshot still happens at the requested dimensions and the attach
+// that follows resizes the window to the real client again.
 func ResizePaneToSize(sessionName string, cols, rows int, opts Options) error {
 	if sessionName == "" || cols <= 0 || rows <= 0 {
 		return nil
 	}
-	return runTmux(
+	if err := runTmux(
 		opts,
 		"resize-window",
 		"-t",
@@ -310,6 +318,17 @@ func ResizePaneToSize(sessionName string, cols, rows int, opts Options) error {
 		strconv.Itoa(cols),
 		"-y",
 		strconv.Itoa(rows),
+	); err != nil {
+		return err
+	}
+	return runTmux(
+		opts,
+		"set-option",
+		"-t",
+		exactSessionOptionTarget(sessionName),
+		"-w",
+		"-u",
+		"window-size",
 	)
 }
 
