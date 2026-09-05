@@ -30,12 +30,14 @@ type AssistantConfig struct {
 	Command          string // Shell command to launch the assistant
 	InterruptCount   int    // Number of Ctrl-C signals to send (default 1, claude needs 2)
 	InterruptDelayMs int    // Delay between interrupts in milliseconds
+	ResumeArgs       string // Args appended to Command to resume a prior conversation on restore; empty disables resume
 }
 
 type assistantConfigRaw struct {
-	Command          string `json:"command"`
-	InterruptCount   *int   `json:"interrupt_count"`
-	InterruptDelayMs *int   `json:"interrupt_delay_ms"`
+	Command          string  `json:"command"`
+	InterruptCount   *int    `json:"interrupt_count"`
+	InterruptDelayMs *int    `json:"interrupt_delay_ms"`
+	ResumeArgs       *string `json:"resume_args"`
 }
 
 const fallbackDefaultAssistant = "claude"
@@ -190,6 +192,7 @@ func defaultAssistants() map[string]AssistantConfig {
 			Command:          def.DefaultCommand,
 			InterruptCount:   def.InterruptCount,
 			InterruptDelayMs: def.InterruptDelayMs,
+			ResumeArgs:       def.ResumeArgs,
 		}
 	}
 	return assistants
@@ -216,6 +219,9 @@ func applyAssistantOverrides(assistants map[string]AssistantConfig, overrides ma
 		}
 		if override.InterruptDelayMs != nil {
 			cfg.InterruptDelayMs = *override.InterruptDelayMs
+		}
+		if override.ResumeArgs != nil {
+			cfg.ResumeArgs = *override.ResumeArgs
 		}
 
 		if cfg.Command == "" {
@@ -316,6 +322,9 @@ func saveAssistants(path string, assistants map[string]AssistantConfig) error {
 		}
 		if cfg.InterruptDelayMs > 0 {
 			entry["interrupt_delay_ms"] = cfg.InterruptDelayMs
+		}
+		if cfg.ResumeArgs != "" {
+			entry["resume_args"] = cfg.ResumeArgs
 		}
 		out[name] = entry
 	}

@@ -245,7 +245,7 @@ func (a *App) handleTmuxTabsDiscoverResult(msg tmuxTabsDiscoverResult) []tea.Cmd
 	}
 	cmds := []tea.Cmd{a.persistWorkspaceTabs(msg.WorkspaceID)}
 	if a.activeWorkspace != nil && string(a.activeWorkspace.ID()) == msg.WorkspaceID {
-		if restoreCmd := a.center.AddTabsFromWorkspace(ws, addedTabs); restoreCmd != nil {
+		if restoreCmd := a.center.AddTabsFromWorkspace(ws, addedTabs, false); restoreCmd != nil {
 			cmds = append(cmds, restoreCmd)
 		}
 	}

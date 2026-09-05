@@ -33,8 +33,10 @@ func TestPersistAllWorkspacesNowSavesExplicitlyEmptyTabs(t *testing.T) {
 		Workspace: ws,
 	}
 	c.AddTab(tab)
-	// Close the tab — tab has no session/agent so close is lightweight
-	_ = c.CloseActiveTab()
+	// Close the tab by ID (bypassing the chat-tab confirmation guard, which
+	// closeCurrentTab/CloseActiveTab would now trigger for this claude tab):
+	// the tab has no session/agent so the close itself is lightweight.
+	_ = c.CloseTabByID(wsID, tab.ID)
 
 	// After close: tabs list is empty but workspace state map entry exists
 	tabs, _ := c.GetTabsInfoForWorkspace(wsID)

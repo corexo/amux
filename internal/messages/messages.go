@@ -363,6 +363,16 @@ type OpenDiff struct {
 // CloseTab requests closing the current tab
 type CloseTab struct{}
 
+// ShowCloseTabDialog requests confirmation before closing an agent/chat tab.
+// WorkspaceID and TabID identify the tab rather than its index so the target
+// survives tab-list mutations between showing the dialog and the user
+// confirming it; TabName is the human-readable label shown in the dialog.
+type ShowCloseTabDialog struct {
+	WorkspaceID string
+	TabID       string
+	TabName     string
+}
+
 // ShowCleanupTmuxDialog requests confirmation before cleaning tmux sessions.
 type ShowCleanupTmuxDialog struct{}
 

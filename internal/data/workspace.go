@@ -13,6 +13,13 @@ const (
 	RuntimeLocalDocker   = "local-docker"
 	RuntimeCloudSandbox  = "cloud-sandbox"
 	DefaultAssistant     = "claude"
+
+	// TerminalAssistant is the pseudo-assistant offered alongside the real
+	// agents in the new-tab picker: selecting it opens a plain login shell in
+	// a center tab instead of launching an agent. It is deliberately not in
+	// config.AgentRegistry, so chat-only behavior (activity classification,
+	// interrupts, restore) keeps skipping it.
+	TerminalAssistant = "terminal"
 )
 
 // NormalizeRuntime returns a normalized runtime string

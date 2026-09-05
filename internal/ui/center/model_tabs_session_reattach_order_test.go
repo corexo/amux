@@ -48,6 +48,7 @@ func installSnapshotSeams(t *testing.T, calls *[]string) {
 		sessionName string,
 		rows, cols uint16,
 		tags tmux.SessionTags,
+		resume bool,
 	) (*appPty.Agent, error) {
 		*calls = append(*calls, "attach")
 		return &appPty.Agent{Session: sessionName}, nil
@@ -137,7 +138,7 @@ func TestReattachToSession_CapturesSnapshotBeforeAttach(t *testing.T) {
 	setKnownViewport(m)
 	ws := newTestWorkspace("ws", "/repo/ws")
 
-	result, ok := m.reattachToSession(ws, TabID("tab-restore"), "codex", "session-restore", 1)().(ptyTabReattachResult)
+	result, ok := m.reattachToSession(ws, TabID("tab-restore"), "codex", "session-restore", 1, true)().(ptyTabReattachResult)
 	if !ok {
 		t.Fatal("expected ptyTabReattachResult")
 	}

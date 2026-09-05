@@ -75,6 +75,63 @@ func (m *Model) createVimTab(filePath string, ws *data.Workspace) tea.Cmd {
 	}
 }
 
+// createTerminalTab opens a plain login shell in a center tab. It goes through
+// the viewer path, not createAgentTab: there is no assistant config to look
+// up, and a non-registry assistant keeps chat semantics (activity scoring,
+// interrupts, restore) off. The tmux type tag is "viewer" rather than
+// "terminal" on purpose — discoverSidebarTerminalsFromTmux adopts every
+// @amux_type=terminal session, which would attach this one twice.
+func (m *Model) createTerminalTab(ws *data.Workspace) tea.Cmd {
+	if ws == nil {
+		return func() tea.Msg {
+			return messages.Error{Err: errors.New("no workspace selected"), Context: "creating terminal"}
+		}
+	}
+
+	tm := m.terminalMetrics()
+	termWidth := tm.Width
+	termHeight := tm.Height
+	tabID := generateTabID()
+	sessionName := tmux.SessionName("amux", string(ws.ID()), string(tabID))
+
+	return func() tea.Msg {
+		shellCommand, err := appPty.LoginShellCommandFromEnv()
+		if err != nil {
+			return messages.Error{Err: err, Context: "creating terminal"}
+		}
+		logging.Info("Creating terminal tab: workspace=%s", ws.Name)
+
+		now := time.Now()
+		tags := tmux.SessionTags{
+			WorkspaceID:  string(ws.ID()),
+			TabID:        string(tabID),
+			Type:         "viewer",
+			Assistant:    data.TerminalAssistant,
+			CreatedAt:    now.Unix(),
+			InstanceID:   m.instanceID,
+			SessionOwner: m.instanceID,
+			LeaseAtMS:    now.UnixMilli(),
+		}
+		ptyRows, ptyCols, _ := appPty.WinsizeFromInts(termHeight, termWidth)
+		agent, err := m.agentManager.CreateViewerWithTags(ws, shellCommand, sessionName, ptyRows, ptyCols, tags)
+		if err != nil {
+			logging.Error("Failed to create terminal tab: %v", err)
+			return messages.Error{Err: err, Context: "creating terminal"}
+		}
+
+		return ptyTabCreateResult{
+			Workspace:   ws,
+			Assistant:   data.TerminalAssistant,
+			DisplayName: data.TerminalAssistant,
+			Agent:       agent,
+			TabID:       tabID,
+			Activate:    true,
+			Rows:        termHeight,
+			Cols:        termWidth,
+		}
+	}
+}
+
 func (m *Model) findOpenDiffTab(ws *data.Workspace, changePath string, mode git.DiffMode) (int, *Tab) {
 	if ws == nil {
 		return -1, nil

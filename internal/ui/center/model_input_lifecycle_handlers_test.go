@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/andyrewlee/amux/internal/data"
 	"github.com/andyrewlee/amux/internal/messages"
 	appPty "github.com/andyrewlee/amux/internal/pty"
 )
@@ -45,6 +46,26 @@ func TestUpdateLaunchAgent_NilWorkspaceReturnsError(t *testing.T) {
 	}
 	if errMsg.Context != "creating agent" {
 		t.Fatalf("unexpected error context: %q", errMsg.Context)
+	}
+}
+
+// TestUpdateLaunchAgent_TerminalRoutesToTerminalTab pins the picker's
+// "terminal" option to the shell-tab path instead of createAgentTab, which
+// would fail on the missing assistant config. A nil workspace keeps the
+// command tmux-free while still proving which branch ran, via the context.
+func TestUpdateLaunchAgent_TerminalRoutesToTerminalTab(t *testing.T) {
+	m := newTestModel()
+
+	_, cmd := m.updateLaunchAgent(messages.LaunchAgent{Assistant: data.TerminalAssistant, Workspace: nil})
+	if cmd == nil {
+		t.Fatal("expected a command even when workspace is nil")
+	}
+	errMsg, ok := cmd().(messages.Error)
+	if !ok {
+		t.Fatalf("expected messages.Error for nil workspace, got %T", cmd())
+	}
+	if errMsg.Context != "creating terminal" {
+		t.Fatalf("unexpected error context: %q, want the terminal-tab path", errMsg.Context)
 	}
 }
 
