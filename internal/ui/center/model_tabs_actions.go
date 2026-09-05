@@ -27,6 +27,39 @@ func (m *Model) closeTabAt(index int) tea.Cmd {
 		return nil
 	}
 
+	// Agent/chat tabs run a live process a stray click must not kill
+	// silently: route through the confirm dialog instead of closing here.
+	// Diff tabs (and anything else isChatTab excludes) fall through to the
+	// synchronous close below, unchanged.
+	if tab := tabs[index]; m.isChatTab(tab) {
+		wsID := m.workspaceID()
+		tabID := string(tab.ID)
+		tabName := tab.Name
+		return func() tea.Msg {
+			return messages.ShowCloseTabDialog{
+				WorkspaceID: wsID,
+				TabID:       tabID,
+				TabName:     tabName,
+			}
+		}
+	}
+
+	return m.closeTabAtForWorkspace(m.workspaceID(), index)
+}
+
+// closeTabAtForWorkspace tears down the tab at index in the given
+// workspace's tab list: stops the PTY reader, closes the agent, releases
+// viewers, removes the tab, clamps the active index, and batches an async
+// tmux session kill. It performs no confirmation of its own; closeTabAt
+// above is the guarded entry point for interactive callers, and
+// CloseTabByID below is the entry point for a confirmed ShowCloseTabDialog
+// result.
+func (m *Model) closeTabAtForWorkspace(wsID string, index int) tea.Cmd {
+	tabs := m.tabs.ByWorkspace[wsID]
+	if len(tabs) == 0 || index < 0 || index >= len(tabs) {
+		return nil
+	}
+
 	tab := tabs[index]
 	tab.markClosing()
 
@@ -61,17 +94,18 @@ func (m *Model) closeTabAt(index int) tea.Cmd {
 	tab.markClosed()
 
 	// Remove from tabs
-	m.removeTab(index)
+	m.tabs.ByWorkspace[wsID] = append(tabs[:index], tabs[index+1:]...)
+	m.noteTabsChanged()
 
 	// Adjust active tab
-	tabs = m.getTabs() // Get updated tabs
-	activeIdx := m.getActiveTabIdx()
+	tabs = m.tabs.ByWorkspace[wsID] // Get updated tabs
+	activeIdx := m.tabs.ActiveByWorkspace[wsID]
 	if index == activeIdx {
 		if activeIdx >= len(tabs) && activeIdx > 0 {
-			m.setActiveTabIdx(activeIdx - 1)
+			m.setActiveTabIdxForWorkspace(wsID, activeIdx-1)
 		}
 	} else if index < activeIdx {
-		m.setActiveTabIdx(activeIdx - 1)
+		m.setActiveTabIdxForWorkspace(wsID, activeIdx-1)
 	}
 
 	closedCmd := func() tea.Msg {
@@ -88,6 +122,26 @@ func (m *Model) closeTabAt(index int) tea.Cmd {
 	}
 
 	return closedCmd
+}
+
+// CloseTabByID closes the tab identified by workspace ID and tab ID,
+// running the same teardown as closeTabAtForWorkspace but bypassing the
+// confirmation guard in closeTabAt. It is the target of a confirmed
+// ShowCloseTabDialog result, so it identifies the tab by ID rather than
+// index: the index can go stale between showing the dialog and the user
+// confirming it. If the tab has already closed, or the pending target no
+// longer exists, this is a no-op rather than a panic or a wrong-tab close.
+func (m *Model) CloseTabByID(wsID string, tabID TabID) tea.Cmd {
+	if wsID == "" {
+		return nil
+	}
+	for idx, tab := range m.tabs.ByWorkspace[wsID] {
+		if tab == nil || tab.isClosed() || tab.ID != tabID {
+			continue
+		}
+		return m.closeTabAtForWorkspace(wsID, idx)
+	}
+	return nil
 }
 
 // hasActiveAgent returns whether there's an active agent

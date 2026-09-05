@@ -40,6 +40,7 @@ const (
 	DialogSelectAssistant = "select_assistant"
 	DialogQuit            = "quit"
 	DialogCleanupTmux     = "cleanup_tmux"
+	DialogCloseTab        = "close_tab"
 )
 
 // prefixTimeoutMsg is sent when the prefix mode timer expires.
@@ -112,6 +113,13 @@ type App struct {
 	// resolved and verified, carried to the confirm handler so it reports the
 	// same branch the user was shown.
 	dialogMergeBase string
+	// dialogCloseTabWorkspaceID and dialogCloseTabTabID are the pending target
+	// for DialogCloseTab, set by handleShowCloseTabDialog and consumed (or
+	// cleared on decline) by handleDialogResult. The tab travels by workspace
+	// ID + tab ID rather than index, so a tab-list mutation while the dialog is
+	// open can never make the confirm close the wrong tab.
+	dialogCloseTabWorkspaceID string
+	dialogCloseTabTabID       center.TabID
 	// Pending workspace creation context while selecting assistant.
 	pendingWorkspaceProject *data.Project
 	pendingWorkspaceName    string
