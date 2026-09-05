@@ -16,6 +16,14 @@ func TestSanitizeAITitle(t *testing.T) {
 		"dash is no idea":  {"-\n", ""},
 		"empty":            {"", ""},
 		"multibyte capped": {"überprüfungslauf", "überprüfun"},
+		// JSON is what the default local model answers; a reasoning model's
+		// monologue around the object must not become the title.
+		"json title":          {"{\n  \"title\": \"docker\"\n}\n", "docker"},
+		"json renamed key":    {"{\"task\": \"authfix\"}", "authfix"},
+		"json dash":           {"{\"title\": \"-\"}", ""},
+		"json after monolog":  {"We are given a transcript...\n{\"title\": \"pagination\"}", "pagination"},
+		"json ambiguous keys": {"{\"answer\": \"-\", \"reason\": \"unclear\"}", ""},
+		"json empty object":   {"{ }", ""},
 	}
 
 	for name, tc := range tests {

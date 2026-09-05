@@ -143,22 +143,37 @@ The built-in roster (default names) is: `claude`, `codex`, `opencode`, `droid`,
 
 ## AI tab titles (`AMUX_TITLE_CMD`)
 
-A new agent tab starts with a static name (`claude`, `codex-2`). About 20
-seconds in, amux captures the last 60 lines of the tab's tmux pane, pipes them
+Tabs start with a static name (`claude`, `pi 2`, `Terminal`). Every 15 seconds
+amux sweeps all tabs that still carry such an auto-generated name and are at
+least 20 seconds old, captures the last 60 lines of their tmux pane, pipes that
 to a helper command on stdin, and uses the first line it prints as the tab
 title — capped at **10 characters**, whitespace and quotes stripped. A helper
 that answers `-` (or fails) leaves the name alone and is retried up to 3 times.
 
-| `AMUX_TITLE_CMD`      | Behavior                                               |
-|-----------------------|--------------------------------------------------------|
-| unset                 | `claude -p` when the `claude` CLI is on PATH, else off  |
-| `off` / `none` / `0`  | disabled                                               |
-| any command           | run via `sh -c`, transcript on stdin, title on stdout  |
+The default helper is a **local** model, so no transcript leaves the machine:
+
+| `AMUX_TITLE_CMD`      | Behavior                                                     |
+|-----------------------|--------------------------------------------------------------|
+| unset                 | `ollama run qwen3:4b --think=false --format json` when `ollama` is on PATH |
+| unset, no ollama      | `claude -p --model haiku` when the `claude` CLI is on PATH   |
+| unset, neither        | off                                                          |
+| `off` / `none` / `0`  | disabled                                                     |
+| any command           | run via `sh -c`, transcript on stdin, title on stdout        |
 
 ```sh
-AMUX_TITLE_CMD="codex exec -" amux     # use a different agent CLI
-AMUX_TITLE_CMD=off amux                # no AI calls at all
+AMUX_TITLE_CMD="ollama run gemma3:4b --format json" amux   # another local model
+AMUX_TITLE_CMD="claude -p --model haiku" amux              # hosted instead
+AMUX_TITLE_CMD=off amux                                    # no calls at all
 ```
 
-Titles are persisted with the tab, so a reattached tab keeps its generated
-name and no further AI calls are made for it.
+The prompt asks for `{"title":"..."}` and amux reads that field when the answer
+looks like JSON (tolerating a truncated object or a renamed key), which is what
+keeps a reasoning model's monologue out of the tab bar; a helper that answers
+plain text works too — its first non-empty line is used.
+
+The ollama default needs a reachable ollama server (`ollama serve`, or the
+distro service) and the model pulled (`ollama pull qwen3:4b`); a 4B model
+answers in well under a second on a warm server. Titles are persisted with the
+tab, and a name that no longer matches the auto-generated shape is never
+overwritten — so a generated (or hand-picked) title survives restarts without
+further calls.

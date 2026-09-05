@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -21,21 +22,26 @@ import (
 // "codex-2" name.
 //
 // ponytail: amux has no LLM client and gains none here. The summary comes from
-// a helper command that reads the pane transcript on stdin and prints one line;
-// AMUX_TITLE_CMD picks it ("off"/"none" disables), and the default is the
-// claude CLI when it is on PATH, so the feature is silent when it is not.
+// a helper command that reads the pane transcript on stdin and prints one line.
+// AMUX_TITLE_CMD picks it ("off"/"none" disables); by default a local ollama
+// model does the work (no tokens leave the machine) and the claude CLI is only
+// the fallback, so the feature stays silent when neither exists.
 const (
 	aiTitleEnv          = "AMUX_TITLE_CMD"
-	aiTitleDefaultCmd   = "claude -p"
+	aiTitleLocalCmd     = "ollama run qwen3:4b --think=false --format json"
+	aiTitleRemoteCmd    = "claude -p --model haiku"
 	aiTitleMaxLen       = 10
 	aiTitleDelay        = 20 * time.Second
 	aiTitleSweepEvery   = 15 * time.Second
 	aiTitleMaxAttempts  = 3
 	aiTitleCaptureLines = 60
 	aiTitleTimeout      = 45 * time.Second
-	aiTitlePrompt       = "Below is the terminal transcript of a coding-agent session. " +
-		"Reply with ONLY a tab title for it: at most 10 characters, lowercase, no spaces, " +
-		"no quotes, no punctuation, no explanation. If no task is identifiable yet, reply exactly -.\n\nTranscript:\n"
+	// The instructions follow the transcript: small local models weight the
+	// tail of the prompt far more heavily, and a JSON answer keeps a reasoning
+	// model's monologue out of the title (see sanitizeAITitle).
+	aiTitlePromptHead = "Terminal transcript of a coding-agent session:\n"
+	aiTitlePromptTail = "\n\nName the task in ONE lowercase word, max 10 letters. " +
+		"Reply as JSON: {\"title\":\"...\"} — use {\"title\":\"-\"} if unclear.\n"
 )
 
 // aiTitleSweepTick drives the periodic scan for still-unnamed tabs. Titles are
@@ -66,10 +72,13 @@ func aiTitleCommand() string {
 	case "off", "none", "0":
 		return ""
 	case "":
-		if _, err := exec.LookPath("claude"); err != nil {
-			return ""
+		if _, err := exec.LookPath("ollama"); err == nil {
+			return aiTitleLocalCmd
 		}
-		return aiTitleDefaultCmd
+		if _, err := exec.LookPath("claude"); err == nil {
+			return aiTitleRemoteCmd
+		}
+		return ""
 	}
 	return cmd
 }
@@ -188,7 +197,7 @@ func runAITitle(cmdStr, transcript string) string {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
-	cmd.Stdin = strings.NewReader(aiTitlePrompt + transcript)
+	cmd.Stdin = strings.NewReader(aiTitlePromptHead + transcript + aiTitlePromptTail)
 	out, err := cmd.Output()
 	if err != nil {
 		logging.Warn("AI tab title command %q failed: %v", cmdStr, err)
@@ -197,14 +206,19 @@ func runAITitle(cmdStr, transcript string) string {
 	return sanitizeAITitle(string(out))
 }
 
-// sanitizeAITitle reduces a helper's answer to a tab label: first non-empty
-// line, no wrapping quotes, no control characters or whitespace, capped at
-// aiTitleMaxLen runes. "" means unusable ("-" is the helper's "no idea yet").
+// sanitizeAITitle reduces a helper's answer to a tab label: the JSON "title"
+// field when the helper answered JSON (the default local model does, which is
+// what keeps a reasoning model's monologue out of the title), otherwise the
+// first non-empty line. Quotes, control characters and whitespace are dropped
+// and the result is capped at aiTitleMaxLen runes. "" means unusable ("-" is
+// the helper's "no idea yet").
 func sanitizeAITitle(s string) string {
-	line := ""
-	for _, candidate := range strings.Split(s, "\n") {
-		if line = strings.TrimSpace(candidate); line != "" {
-			break
+	line, isJSON := jsonAITitle(s)
+	if !isJSON {
+		for _, candidate := range strings.Split(s, "\n") {
+			if line = strings.TrimSpace(candidate); line != "" {
+				break
+			}
 		}
 	}
 	line = strings.Trim(line, "\"'`*")
@@ -224,6 +238,34 @@ func sanitizeAITitle(s string) string {
 	}
 	return ""
 }
+
+// jsonAITitle pulls the title out of a JSON answer. It matches fields textually
+// rather than decoding, because a model that hits its token budget emits a
+// valid-looking but unterminated object ({"title": "docker" with no closing
+// brace) that no JSON decoder accepts. It also tolerates a renamed key (small
+// models rename "title" freely) and prose wrapped around the object. The bool
+// reports whether the answer was JSON at all: when it was, its raw text must
+// never be used as a fallback title.
+func jsonAITitle(s string) (string, bool) {
+	if !strings.Contains(s, "{") {
+		return "", false
+	}
+	if match := aiTitleJSONTitleField.FindStringSubmatch(s); match != nil {
+		return match[1], true
+	}
+	// A renamed key only counts when it is the object's single string field —
+	// otherwise (e.g. {"answer":"-","reason":"unclear"}) the pick would be
+	// arbitrary.
+	if fields := aiTitleJSONStringField.FindAllStringSubmatch(s, 2); len(fields) == 1 {
+		return fields[0][1], true
+	}
+	return "", true
+}
+
+var (
+	aiTitleJSONTitleField  = regexp.MustCompile(`"title"\s*:\s*"([^"]*)"`)
+	aiTitleJSONStringField = regexp.MustCompile(`"[^"]*"\s*:\s*"([^"]*)"`)
+)
 
 // updateAITitleResult applies a title, or re-arms the tick when the helper had
 // nothing usable yet.
