@@ -20,11 +20,18 @@ func (a *App) assistantNames() []string {
 	return []string{a.defaultAssistantName()}
 }
 
-// assistantPickerOptions is the new-tab picker roster: the configured
-// assistants plus the "terminal" pseudo-assistant, which opens a plain shell
-// tab. Returns a fresh slice so appending never writes into config state.
+// assistantPickerOptions is the new-tab picker roster: the configured,
+// non-hidden assistants plus the "terminal" pseudo-assistant, which opens a
+// plain shell tab. If every configured assistant is hidden, falls back to the
+// full roster rather than showing an empty picker. Returns a fresh slice so
+// appending never writes into config state.
 func (a *App) assistantPickerOptions() []string {
 	names := a.assistantNames()
+	if a != nil && a.config != nil {
+		if visible := a.config.VisibleAssistantNames(); len(visible) > 0 {
+			names = visible
+		}
+	}
 	out := make([]string, 0, len(names)+1)
 	out = append(out, names...)
 	return append(out, data.TerminalAssistant)
