@@ -182,6 +182,29 @@ func TestIsKnownAssistant(t *testing.T) {
 	}
 }
 
+// TestAssistantPickerOptionsAppendsTerminal asserts the new-tab picker offers
+// the terminal pseudo-assistant after the configured agents, and that the
+// launch gate accepts it even though no config entry backs it.
+func TestAssistantPickerOptionsAppendsTerminal(t *testing.T) {
+	cfg := &config.Config{Assistants: map[string]config.AssistantConfig{
+		"claude": {Command: "claude"},
+	}}
+	app := &App{config: cfg}
+
+	names := app.assistantNames()
+	got := app.assistantPickerOptions()
+	if len(got) != len(names)+1 || got[len(got)-1] != data.TerminalAssistant {
+		t.Fatalf("assistantPickerOptions() = %#v, want %#v plus %q", got, names, data.TerminalAssistant)
+	}
+	// The picker roster must not be written back into the assistant list.
+	if after := app.assistantNames(); !reflect.DeepEqual(after, names) {
+		t.Fatalf("assistantNames() mutated: %#v, want %#v", after, names)
+	}
+	if !app.isKnownAssistant(data.TerminalAssistant) {
+		t.Fatalf("isKnownAssistant(%q) = false, want true", data.TerminalAssistant)
+	}
+}
+
 // TestAssistantNamesMatchesConfigOrdering asserts assistantNames is a faithful
 // pass-through of Config.AssistantNames when config supplies any names, rather
 // than re-deriving or re-sorting the roster itself.

@@ -116,7 +116,7 @@ func TestRebindActiveSelection_DoesNotRehydratePersistedTabsWhenWorkspaceStateEx
 		Assistant: "codex",
 		Workspace: oldWS,
 	})
-	_ = centerModel.CloseActiveTab()
+	_ = centerModel.CloseTabByID(string(oldWS.ID()), center.TabID("existing"))
 	if centerModel.HasTabs() {
 		t.Fatal("expected no active tabs after closing placeholder tab")
 	}

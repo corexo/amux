@@ -338,6 +338,8 @@ func (a *App) updateDialogShowMsg(msg tea.Msg, cmds *[]tea.Cmd) bool {
 		a.handleShowSettingsDialog()
 	case messages.ShowCleanupTmuxDialog:
 		a.handleShowCleanupTmuxDialog()
+	case messages.ShowCloseTabDialog:
+		a.handleShowCloseTabDialog(msg)
 	case common.ThemePreview:
 		if cmd := a.handleThemePreview(msg); cmd != nil {
 			*cmds = append(*cmds, cmd)

@@ -28,6 +28,7 @@ var appDialogIDList = []string{
 	common.AgentPickerDialogID,
 	DialogQuit,
 	DialogCleanupTmux,
+	DialogCloseTab,
 }
 
 // appDialogIDs is the set form of appDialogIDList, built once at init. Routing
