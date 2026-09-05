@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/andyrewlee/amux/internal/data"
 	"github.com/andyrewlee/amux/internal/logging"
 	"github.com/andyrewlee/amux/internal/messages"
 	"github.com/andyrewlee/amux/internal/tmux"
@@ -45,8 +46,13 @@ func (m *Model) userInputActivityTagCmd(tab *Tab) tea.Cmd {
 	}
 }
 
-// updateLaunchAgent handles messages.LaunchAgent.
+// updateLaunchAgent handles messages.LaunchAgent. The "terminal" pseudo-
+// assistant from the new-tab picker is not a configured agent: it opens a
+// plain login shell instead.
 func (m *Model) updateLaunchAgent(msg messages.LaunchAgent) (*Model, tea.Cmd) {
+	if msg.Assistant == data.TerminalAssistant {
+		return m, m.createTerminalTab(msg.Workspace)
+	}
 	return m, m.createAgentTab(msg.Assistant, msg.Workspace)
 }
 

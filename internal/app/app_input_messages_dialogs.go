@@ -243,7 +243,7 @@ func (a *App) handleShowSelectAssistantDialog() {
 	if a.activeWorkspace == nil && a.pendingWorkspaceProject == nil {
 		return
 	}
-	a.dialog = common.NewAgentPicker(a.assistantNames())
+	a.dialog = common.NewAgentPicker(a.assistantPickerOptions())
 	a.presentDialog(a.dialog)
 }
 

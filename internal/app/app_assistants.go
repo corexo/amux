@@ -20,10 +20,25 @@ func (a *App) assistantNames() []string {
 	return []string{a.defaultAssistantName()}
 }
 
+// assistantPickerOptions is the new-tab picker roster: the configured
+// assistants plus the "terminal" pseudo-assistant, which opens a plain shell
+// tab. Returns a fresh slice so appending never writes into config state.
+func (a *App) assistantPickerOptions() []string {
+	names := a.assistantNames()
+	out := make([]string, 0, len(names)+1)
+	out = append(out, names...)
+	return append(out, data.TerminalAssistant)
+}
+
 func (a *App) isKnownAssistant(name string) bool {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return false
+	}
+	if name == data.TerminalAssistant {
+		// Not a configured assistant: it is handled by the center pane as a
+		// shell tab, but every launch path gates on this predicate.
+		return true
 	}
 	if a == nil || a.config == nil || len(a.config.Assistants) == 0 {
 		return true
