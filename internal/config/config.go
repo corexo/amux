@@ -31,6 +31,7 @@ type AssistantConfig struct {
 	InterruptCount   int    // Number of Ctrl-C signals to send (default 1, claude needs 2)
 	InterruptDelayMs int    // Delay between interrupts in milliseconds
 	ResumeArgs       string // Args appended to Command to resume a prior conversation on restore; empty disables resume
+	Hidden           bool   // Excludes the assistant from the new-tab picker only; launch, restore, and validation are unaffected
 }
 
 type assistantConfigRaw struct {
@@ -38,6 +39,7 @@ type assistantConfigRaw struct {
 	InterruptCount   *int    `json:"interrupt_count"`
 	InterruptDelayMs *int    `json:"interrupt_delay_ms"`
 	ResumeArgs       *string `json:"resume_args"`
+	Hidden           *bool   `json:"hidden"`
 }
 
 const fallbackDefaultAssistant = "claude"
@@ -150,6 +152,24 @@ func (c *Config) AssistantNames() []string {
 	return orderedAssistantNames(c.Assistants)
 }
 
+// VisibleAssistantNames returns assistant IDs in deterministic display order,
+// excluding entries marked Hidden. Used only for the new-tab picker roster;
+// every other consumer (launch, restore, IsAssistantKnown) uses AssistantNames
+// so hiding an assistant never affects anything but the picker.
+func (c *Config) VisibleAssistantNames() []string {
+	if c == nil {
+		return nil
+	}
+	names := orderedAssistantNames(c.Assistants)
+	visible := make([]string, 0, len(names))
+	for _, name := range names {
+		if !c.Assistants[name].Hidden {
+			visible = append(visible, name)
+		}
+	}
+	return visible
+}
+
 // IsAssistantKnown reports whether assistant exists in loaded config.
 func (c *Config) IsAssistantKnown(assistant string) bool {
 	if c == nil || len(c.Assistants) == 0 {
@@ -222,6 +242,9 @@ func applyAssistantOverrides(assistants map[string]AssistantConfig, overrides ma
 		}
 		if override.ResumeArgs != nil {
 			cfg.ResumeArgs = *override.ResumeArgs
+		}
+		if override.Hidden != nil {
+			cfg.Hidden = *override.Hidden
 		}
 
 		if cfg.Command == "" {
@@ -325,6 +348,9 @@ func saveAssistants(path string, assistants map[string]AssistantConfig) error {
 		}
 		if cfg.ResumeArgs != "" {
 			entry["resume_args"] = cfg.ResumeArgs
+		}
+		if cfg.Hidden {
+			entry["hidden"] = true
 		}
 		out[name] = entry
 	}
