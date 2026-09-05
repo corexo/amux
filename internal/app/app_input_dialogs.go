@@ -106,11 +106,15 @@ func (a *App) handleDialogResult(result common.DialogResult) tea.Cmd {
 	workspace := a.dialogWorkspace
 	trustScriptsHash := a.dialogTrustScriptsHash
 	mergeBase := a.dialogMergeBase
+	closeTabWorkspaceID := a.dialogCloseTabWorkspaceID
+	closeTabTabID := a.dialogCloseTabTabID
 	a.dialog = nil
 	a.dialogProject = nil
 	a.dialogWorkspace = nil
 	a.dialogTrustScriptsHash = ""
 	a.dialogMergeBase = ""
+	a.dialogCloseTabWorkspaceID = ""
+	a.dialogCloseTabTabID = ""
 	logging.Debug("Dialog result: id=%s confirmed=%v value_len=%d", result.ID, result.Confirmed, len(result.Value))
 
 	// Defensive: handleDialogResult only knows how to act on IDs in the shared
@@ -282,6 +286,9 @@ func (a *App) handleDialogResult(result common.DialogResult) tea.Cmd {
 
 	case DialogCleanupTmux:
 		return func() tea.Msg { return messages.CleanupTmuxSessions{} }
+
+	case DialogCloseTab:
+		return a.center.CloseTabByID(closeTabWorkspaceID, closeTabTabID)
 	}
 
 	return nil

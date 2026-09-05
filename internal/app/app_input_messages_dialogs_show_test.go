@@ -412,3 +412,62 @@ func TestHandleShowCleanupTmuxDialog_ReshowsAfterDismiss(t *testing.T) {
 		t.Fatal("expected a newly constructed dialog after dismissal")
 	}
 }
+
+func TestHandleShowCloseTabDialog_ShowsTabNameAndGuardsReentry(t *testing.T) {
+	h := newDialogHarness(t)
+
+	h.app.handleShowCloseTabDialog(messages.ShowCloseTabDialog{
+		WorkspaceID: "ws-1",
+		TabID:       "tab-0",
+		TabName:     "claude",
+	})
+
+	if h.app.dialog == nil || !h.app.dialog.Visible() {
+		t.Fatal("expected close-tab dialog to be visible")
+	}
+	if h.app.dialogCloseTabWorkspaceID != "ws-1" || h.app.dialogCloseTabTabID != "tab-0" {
+		t.Fatalf("expected pending target ws-1/tab-0, got %q/%q", h.app.dialogCloseTabWorkspaceID, h.app.dialogCloseTabTabID)
+	}
+
+	view := dialogView(t, h.app.dialog)
+	if !strings.Contains(view, "Close Agent Tab") {
+		t.Fatalf("expected close-tab title in view, got %q", view)
+	}
+	if !strings.Contains(view, "claude") {
+		t.Fatalf("expected the tab name in the prompt, got %q", view)
+	}
+
+	// Re-invoking while the dialog is already visible must not replace it or
+	// swap its pending target.
+	existing := h.app.dialog
+	h.app.handleShowCloseTabDialog(messages.ShowCloseTabDialog{
+		WorkspaceID: "ws-2",
+		TabID:       "tab-9",
+		TabName:     "codex",
+	})
+	if h.app.dialog != existing {
+		t.Fatal("expected re-entrant show to keep the existing visible dialog")
+	}
+	if h.app.dialogCloseTabWorkspaceID != "ws-1" || h.app.dialogCloseTabTabID != "tab-0" {
+		t.Fatal("expected re-entrant show to keep the original pending target")
+	}
+}
+
+func TestHandleShowCloseTabDialog_DefaultsToNo(t *testing.T) {
+	h := newDialogHarness(t)
+	h.app.handleShowCloseTabDialog(messages.ShowCloseTabDialog{
+		WorkspaceID: "ws-1",
+		TabID:       "tab-0",
+		TabName:     "claude",
+	})
+
+	// SetDefaultOption(1) pins the default to "No", so a stray Enter on the
+	// freshly shown dialog must not confirm the close.
+	res := confirmResult(t, h.app.dialog)
+	if res.ID != DialogCloseTab {
+		t.Fatalf("expected result ID %q, got %q", DialogCloseTab, res.ID)
+	}
+	if res.Confirmed {
+		t.Fatal("expected close-tab dialog to default to the No option")
+	}
+}
