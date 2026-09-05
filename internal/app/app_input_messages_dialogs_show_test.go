@@ -356,8 +356,11 @@ func TestHandleShowSelectAssistantDialog_ShowsAgentPicker(t *testing.T) {
 			if !strings.Contains(view, "New Agent") {
 				t.Fatalf("expected agent picker title in view, got %q", view)
 			}
-			// The picker is seeded from the configured assistant names.
-			for _, name := range h.app.assistantNames() {
+			// The picker is seeded from the picker roster, which drops
+			// assistants the user's config marks hidden — asserting the full
+			// assistantNames() roster here would fail on any host whose
+			// ~/.amux/config.json hides an entry.
+			for _, name := range h.app.assistantPickerOptions() {
 				if !strings.Contains(view, name) {
 					t.Fatalf("expected assistant %q in picker view, got %q", name, view)
 				}
